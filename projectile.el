@@ -229,9 +229,7 @@ Files are returned as relative paths to the project root."
                   (-map (lambda (file) (s-chop-prefix root file))
                         (projectile-index-directory directory (projectile-patterns-to-ignore)))))
         ;; use external tools to get the project files
-        (let ((current-dir (if (buffer-file-name)
-                               (file-name-directory (buffer-file-name))
-                             default-directory)))
+        (let ((current-dir (projectile-project-root)))
           (cd current-dir)
           (setq files-list (-map (lambda (f)
                                    (s-chop-prefix root (expand-file-name f current-dir)))
