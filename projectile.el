@@ -254,8 +254,8 @@ Files are returned as relative paths to the project root."
 (defun projectile-cache-current-file ()
   "Add the currently visited file to the cache."
   (interactive)
-  (let ((current-file (buffer-file-name (current-buffer)))
-        (current-project (projectile-project-root)))
+  (let* ((current-project (projectile-project-root))
+        (current-file (file-relative-name (buffer-file-name (current-buffer)) current-project)))
     (unless (projectile-file-cached-p current-file current-project)
       (puthash current-project
                (cons current-file (gethash current-project projectile-projects-cache))
@@ -264,16 +264,16 @@ Files are returned as relative paths to the project root."
       (message "File %s added to project %s cache." current-file current-project))))
 
 ;; cache opened files automatically to reduce the need for cache invalidation
-(add-hook 'find-file-hook
-          (lambda ()
-            (when (and (projectile-project-p) projectile-enable-caching)
-              (projectile-cache-current-file))))
+(defun projectile-cache-files-find-file-hook ()
+  "Function for caching files with `find-file-hook`."
+  (when (and (projectile-project-p) projectile-enable-caching)
+    (projectile-cache-current-file)))
 
-(add-hook 'find-file-hook
-          (lambda ()
-            (when (projectile-project-p)
-              (projectile-add-known-project (projectile-project-root))
-              (projectile-save-known-projects))))
+(defun projectile-cache-projects-find-file-hook ()
+  "Function for caching projects with `find-file-hook`."
+  (when (projectile-project-p)
+    (projectile-add-known-project (projectile-project-root))
+    (projectile-save-known-projects)))
 
 (defcustom projectile-git-command "git ls-files -zco --exclude-standard"
   "Command used by projectile to get the files in a git project."
@@ -497,8 +497,11 @@ project-root for every file."
   "Present a project tailored PROMPT with CHOICES."
   (let ((prompt (projectile-prepend-project-name prompt)))
     (cond
-     ((eq projectile-completion-system 'ido) (ido-completing-read prompt choices))
-     (t (completing-read prompt choices)))))
+     ((eq projectile-completion-system 'ido)
+      (ido-completing-read prompt choices))
+     ((eq projectile-completion-system 'default)
+      (completing-read prompt choices))
+     (t (funcall projectile-completion-system prompt choices)))))
 
 (defun projectile-current-project-files ()
   "Return a list of files for the current project."
@@ -574,8 +577,8 @@ With a prefix ARG invalidates the cache first."
 (defvar projectile-rails-rspec '("Gemfile" "app" "lib" "db" "config" "spec"))
 (defvar projectile-rails-test '("Gemfile" "app" "lib" "db" "config" "test"))
 (defvar projectile-symfony '("composer.json" "app" "src" "vendor"))
-(defvar projectile-ruby-rspec '("Gemfile" "lib" "pkg" "spec"))
-(defvar projectile-ruby-test '("Gemfile" "lib" "pkg" "test"))
+(defvar projectile-ruby-rspec '("Gemfile" "lib" "spec"))
+(defvar projectile-ruby-test '("Gemfile" "lib" "test"))
 (defvar projectile-maven '("pom.xml"))
 (defvar projectile-lein '("project.clj"))
 (defvar projectile-rebar '("rebar"))
@@ -759,8 +762,8 @@ With a prefix ARG invalidates the cache first."
   (projectile-serialize projectile-projects-cache projectile-cache-file))
 
 (defvar projectile-rails-compile-cmd "bundle exec rails server")
-(defvar projectile-ruby-compile-cmd "bundle exec rake")
-(defvar projectile-ruby-test-cmd "bundle rake test")
+(defvar projectile-ruby-compile-cmd "bundle exec rake build")
+(defvar projectile-ruby-test-cmd "bundle exec rake test")
 (defvar projectile-ruby-rspec-cmd "bundle exec rspec")
 (defvar projectile-symfony-compile-cmd "app/console server:run")
 (defvar projectile-symfony-test-cmd "phpunit -c app ")
@@ -952,6 +955,22 @@ Also set `projectile-known-projects'."
 (defun projectile-off ()
   "Disable Projectile minor mode."
   (projectile-mode -1))
+
+(defun projectile-global-on ()
+  "Enable Projectile global minor mode."
+  (add-hook 'find-file-hook 'projectile-cache-files-find-file-hook)
+  (add-hook 'find-file-hook 'projectile-cache-projects-find-file-hook))
+
+(defun projectile-global-off ()
+  "Disable Projectile global minor mode."
+  (remove-hook 'find-file-hook 'projectile-cache-files-find-file-hook)
+  (remove-hook 'find-file-hook 'projectile-cache-projects-find-file-hook))
+
+(defadvice projectile-global-mode (after projectile-setup-hooks activate)
+  "Add/remove `find-file-hook' functions within `projectile-global-mode'."
+  (if projectile-global-mode
+      (projectile-global-on)
+    (projectile-global-off)))
 
 (provide 'projectile)
 
